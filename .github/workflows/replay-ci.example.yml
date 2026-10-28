@@ -1,0 +1,35 @@
+# Example workflow. Copy into workflows/replay-ci.yml and adjust paths/secrets.
+# This file is named *.example.yml so GitHub Actions does not run it by default.
+
+name: API replay
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Start or point at your candidate API, then:
+      - name: Replay recorded traffic
+        id: replay
+        uses: ./.github/actions/replay-run
+        with:
+          target: ${{ vars.REPLAY_TARGET }}
+          requests: examples/demo_api/requests.json
+          baseline: baseline.json
+          report: report.json
+          upload: "true"
+          api-url: ${{ vars.REPLAY_API_URL }}
+          project-id: ${{ vars.REPLAY_PROJECT_ID }}
+          api-token: ${{ secrets.REPLAY_API_TOKEN }}
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-report
+          path: report.json

@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: replay
+      POSTGRES_PASSWORD: replay
+      POSTGRES_DB: replay
+    ports:
+      - "5432:5432"
+    volumes:
+      - replay_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U replay -d replay"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://replay:replay@postgres:5432/replay
+      TOKEN_PEPPER: dev-only-change-me
+      CREATE_TABLES_ON_STARTUP: "true"
+      LLM_ENABLED: "false"
+      LLM_API_KEY: ""
+      LLM_BASE_URL: https://api.openai.com/v1
+      LLM_MODEL: gpt-4o-mini
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  replay_pg:

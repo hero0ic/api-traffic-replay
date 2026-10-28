@@ -1,0 +1,9 @@
+{
+  "name": "demo",
+  "ignore": ["id", "created_at"],
+  "requests": [
+    {"id": "health", "method": "GET", "path": "/health"},
+    {"id": "order", "method": "GET", "path": "/order"},
+    {"id": "clock", "method": "GET", "path": "/clock"}
+  ]
+}

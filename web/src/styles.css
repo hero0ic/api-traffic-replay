@@ -1,0 +1,376 @@
+:root {
+  color-scheme: light;
+  --bg: #f3efe6;
+  --bg-accent: #e7e0d2;
+  --panel: #fffdf8;
+  --ink: #1c1a16;
+  --muted: #6b6458;
+  --line: #d5cec0;
+  --ok: #1f6b45;
+  --ok-bg: #e4f2ea;
+  --bad: #9b2c2c;
+  --bad-bg: #f8e6e6;
+  --warn: #8a5a00;
+  --warn-bg: #f7edd6;
+  --accent: #0f4c5c;
+  --accent-hover: #0b3a46;
+  --shadow: 0 18px 40px rgba(28, 26, 22, 0.08);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  line-height: 1.45;
+  font-weight: 400;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(15, 76, 92, 0.08), transparent 40%),
+    linear-gradient(180deg, #f7f3eb 0%, var(--bg) 40%, #ebe4d7 100%);
+  min-height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+.mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.92em;
+}
+
+.page {
+  width: min(1100px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.login-page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
+
+.login-panel,
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
+.login-panel {
+  width: min(480px, 100%);
+  padding: 2rem;
+}
+
+.panel {
+  padding: 1.25rem 1.4rem 1.5rem;
+  margin-top: 1.25rem;
+}
+
+.panel-head {
+  margin-bottom: 1rem;
+}
+
+.panel-head.row,
+.topbar,
+.meta-grid {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.topbar {
+  margin-bottom: 0.5rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+}
+
+h2 {
+  font-size: 1.15rem;
+}
+
+.lede,
+.muted {
+  color: var(--muted);
+}
+
+.lede {
+  margin: 0.75rem 0 1.5rem;
+}
+
+.stack {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+input[type="text"],
+input[type="password"],
+input:not([type]) {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+  background: #fff;
+  color: var(--ink);
+}
+
+input:focus {
+  outline: 2px solid rgba(15, 76, 92, 0.25);
+  border-color: var(--accent);
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.75rem 1.1rem;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--line);
+}
+
+.form-error {
+  margin: 0;
+  color: var(--bad);
+  background: var(--bad-bg);
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+}
+
+.summary-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.pill,
+.outcome-tag,
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--bg-accent);
+  color: var(--ink);
+  text-transform: lowercase;
+}
+
+.pill-ok,
+.outcome-matched,
+.status-clean {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.pill-bad,
+.outcome-regressed,
+.status-regressed {
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+
+.pill-warn,
+.outcome-errored,
+.status-errored {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.run-table-wrap {
+  overflow-x: auto;
+}
+
+.run-table,
+.diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.run-table th,
+.run-table td,
+.diff-table th,
+.diff-table td {
+  text-align: left;
+  padding: 0.75rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.run-table th,
+.diff-table th {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+
+.meta-grid dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.meta-grid dd {
+  margin: 0.25rem 0 0;
+}
+
+.toggle {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
+.result-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.result-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.9rem 1rem 1rem;
+  background: #fff;
+}
+
+.result-card.outcome-regressed {
+  border-color: rgba(155, 44, 44, 0.28);
+}
+
+.result-card.outcome-errored {
+  border-color: rgba(138, 90, 0, 0.28);
+}
+
+.result-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.8rem;
+  align-items: center;
+  margin-bottom: 0.7rem;
+}
+
+.request-id {
+  font-weight: 500;
+}
+
+.request-line,
+.status-pair {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.88rem;
+}
+
+.error-line {
+  margin: 0 0 0.75rem;
+  color: var(--warn);
+}
+
+.diagnosis-block {
+  margin-top: 0.5rem;
+}
+
+.diagnosis-meta {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+}
+
+.diagnosis-content {
+  margin: 0;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.diff-table code {
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .panel-head.row,
+  .topbar {
+    flex-direction: column;
+  }
+
+  .run-table .summary-pills {
+    max-width: 180px;
+  }
+}
