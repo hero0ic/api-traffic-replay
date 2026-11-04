@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from replay_core.redact import REDACTION_PLACEHOLDER, is_secret_field_name, redact_json
+
 PROMPT_VERSION = "v1"
 MAX_CASES = 20
 MAX_VALUE_CHARS = 200
@@ -92,13 +94,22 @@ def build_diagnosis_prompt(report: dict[str, Any]) -> dict[str, Any]:
 
 
 def _compact_diff(diff: dict[str, Any]) -> dict[str, Any]:
+    path = str(diff.get("path") or "")
     return {
         "kind": diff.get("kind"),
-        "path": diff.get("path"),
+        "path": path,
         "op": diff.get("op"),
-        "baseline": _truncate(diff.get("baseline")),
-        "candidate": _truncate(diff.get("candidate")),
+        "baseline": _truncate(_redact_diff_side(path, diff.get("baseline"))),
+        "candidate": _truncate(_redact_diff_side(path, diff.get("candidate"))),
     }
+
+
+def _redact_diff_side(path: str, value: Any) -> Any:
+    # If the diff path itself is a secret field name, never send the raw value.
+    leaf = path.rsplit(".", 1)[-1] if path else ""
+    if leaf and is_secret_field_name(leaf):
+        return REDACTION_PLACEHOLDER
+    return redact_json(value)
 
 
 def _truncate(value: Any) -> Any:

@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from replay_core.models import RequestCollection, RequestSpec
+from replay_core.redact import redact_json, redact_request_path
 
 # Request headers that should not be copied into a checked-in request file.
 STRIP_REQUEST_HEADERS = frozenset(
@@ -110,9 +111,11 @@ def _entry_to_spec(
     if parsed.scheme not in {"http", "https"}:
         return None
 
-    path = _path_for_request(parsed, base=base, index=index)
+    path = redact_request_path(_path_for_request(parsed, base=base, index=index))
     headers = _headers_from_har(request.get("headers"))
     json_body, body = _body_from_har(request.get("postData"))
+    if json_body is not None:
+        json_body = redact_json(json_body)
 
     request_id = _unique_id(method, path, index, used_ids)
     return RequestSpec(

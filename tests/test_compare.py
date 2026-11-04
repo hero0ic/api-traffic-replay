@@ -16,6 +16,8 @@ _MISSING = object()
 def make_exchange(
     *,
     id: str = "req",
+    method: str = "GET",
+    path: str = "/",
     status: int | None = 200,
     payload: Any = _MISSING,
     headers: dict[str, str] | None = None,
@@ -23,6 +25,7 @@ def make_exchange(
     is_json: bool = True,
     body_encoding: str = "utf-8",
     error: str | None = None,
+    elapsed_ms: float | None = None,
 ) -> Exchange:
     if payload is _MISSING:
         json_body = {} if is_json else None
@@ -30,8 +33,8 @@ def make_exchange(
         json_body = payload
     return Exchange(
         id=id,
-        method="GET",
-        path="/",
+        method=method,
+        path=path,
         status=status,
         headers=headers or {},
         json_body=json_body,
@@ -39,6 +42,7 @@ def make_exchange(
         body_encoding=body_encoding,  # type: ignore[arg-type]
         is_json=is_json,
         error=error,
+        elapsed_ms=elapsed_ms,
     )
 
 
@@ -137,11 +141,32 @@ CASES = [
         ],
     },
     {
-        "name": "header value change",
+        "name": "volatile request id header is ignored",
         "baseline": {"headers": {"X-Request-Id": "abc"}},
         "candidate": {"headers": {"X-Request-Id": "xyz"}},
         "ignore": [],
-        "expected": [("header", "x-request-id", "replace", "abc", "xyz")],
+        "expected": [],
+    },
+    {
+        "name": "custom header value change",
+        "baseline": {"headers": {"X-Api-Version": "1"}},
+        "candidate": {"headers": {"X-Api-Version": "2"}},
+        "ignore": [],
+        "expected": [("header", "x-api-version", "replace", "1", "2")],
+    },
+    {
+        "name": "json to empty plaintext is a regression",
+        "baseline": {"payload": {"ok": True}},
+        "candidate": {"is_json": False, "body": ""},
+        "ignore": [],
+        "expected": [("body", "", "replace", '{"ok":true}', "")],
+    },
+    {
+        "name": "json to plaintext body is a regression",
+        "baseline": {"payload": {"ok": True}},
+        "candidate": {"is_json": False, "body": "ok"},
+        "ignore": [],
+        "expected": [("body", "", "replace", '{"ok":true}', "ok")],
     },
     {
         "name": "non-json body change",
@@ -256,14 +281,14 @@ def test_build_report_counts_each_outcome() -> None:
         RequestSpec(id="down", method="GET", path="/down"),
     ]
     baseline = [
-        make_exchange(id="ok", payload={"n": 1}),
-        make_exchange(id="bad", payload={"n": 1}),
-        make_exchange(id="down", payload={"n": 1}),
+        make_exchange(id="ok", path="/ok", payload={"n": 1}),
+        make_exchange(id="bad", path="/bad", payload={"n": 1}),
+        make_exchange(id="down", path="/down", payload={"n": 1}),
     ]
     candidate = [
-        make_exchange(id="ok", payload={"n": 1}),
-        make_exchange(id="bad", payload={"n": 2}),
-        make_exchange(id="down", status=None, is_json=False, error="timeout"),
+        make_exchange(id="ok", path="/ok", payload={"n": 1}),
+        make_exchange(id="bad", path="/bad", payload={"n": 2}),
+        make_exchange(id="down", path="/down", status=None, is_json=False, error="timeout"),
     ]
     report = build_report("demo", specs, baseline, candidate, ignore=[])
     assert report.summary.model_dump() == {
@@ -282,7 +307,7 @@ def test_missing_baseline_is_an_error() -> None:
         "demo",
         [spec],
         [],
-        [make_exchange(id="health", payload={"ok": True})],
+        [make_exchange(id="health", path="/health", payload={"ok": True})],
         ignore=[],
     )
     assert report.results[0].outcome == "errored"
@@ -294,12 +319,42 @@ def test_failed_baseline_is_not_a_match() -> None:
     report = build_report(
         "demo",
         [spec],
-        [make_exchange(id="health", status=None, is_json=False, error="timeout")],
-        [make_exchange(id="health", payload={"ok": True})],
+        [make_exchange(id="health", path="/health", status=None, is_json=False, error="timeout")],
+        [make_exchange(id="health", path="/health", payload={"ok": True})],
         ignore=[],
     )
     assert report.results[0].outcome == "errored"
     assert report.results[0].error == "baseline request failed: timeout"
+
+
+def test_extra_ignore_header_suppresses_custom_header() -> None:
+    diffs = compare_responses(
+        make_exchange(headers={"X-Api-Version": "1"}),
+        make_exchange(headers={"X-Api-Version": "2"}),
+        ignore=[],
+        ignore_headers=["x-api-version"],
+    )
+    assert diffs == []
+
+
+def test_identity_mismatch_is_an_error() -> None:
+    spec = RequestSpec(id="user", method="GET", path="/users/2")
+    baseline = [make_exchange(id="user", path="/users/1", payload={"ok": True})]
+    candidate = [make_exchange(id="user", path="/users/2", payload={"ok": True})]
+    report = build_report("demo", [spec], baseline, candidate, ignore=[])
+    assert report.results[0].outcome == "errored"
+    assert "identity mismatch" in (report.results[0].error or "")
+
+
+def test_latency_regression_uses_threshold() -> None:
+    baseline = make_exchange(payload={"ok": True}, status=200, elapsed_ms=100.0)
+    candidate = make_exchange(payload={"ok": True}, status=200, elapsed_ms=500.0)
+    diffs = compare_responses(baseline, candidate, ignore=[], check_latency=True)
+    assert [(diff.kind, diff.baseline, diff.candidate) for diff in diffs] == [
+        ("latency", 100.0, 500.0)
+    ]
+    ignored = compare_responses(baseline, candidate, ignore=[], check_latency=False)
+    assert ignored == []
 
 
 def test_baseline_round_trip(tmp_path: Path) -> None:

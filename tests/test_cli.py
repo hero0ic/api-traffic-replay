@@ -65,6 +65,51 @@ def test_record_refuses_post_without_unsafe(tmp_path: Path) -> None:
     assert "unsafe" in result.stderr
 
 
+def test_fingerprint_mismatch_exits_2(tmp_path: Path) -> None:
+    requests_path = tmp_path / "requests.json"
+    baseline_path = tmp_path / "baseline.json"
+    requests_path.write_text(
+        json.dumps({"name": "demo", "requests": [{"id": "a", "method": "GET", "path": "/a"}]}),
+        encoding="utf-8",
+    )
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "name": "demo",
+                "target": "http://127.0.0.1:9",
+                "requests_fingerprint": "not-the-real-hash",
+                "exchanges": [
+                    {
+                        "id": "a",
+                        "method": "GET",
+                        "path": "/a",
+                        "status": 200,
+                        "headers": {},
+                        "json": {"ok": True},
+                        "is_json": True,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = run_cli(
+        [
+            "run",
+            "--target",
+            "http://127.0.0.1:9",
+            "--requests",
+            str(requests_path),
+            "--baseline",
+            str(baseline_path),
+            "--out",
+            str(tmp_path / "report.json"),
+        ]
+    )
+    assert result.returncode == 2
+    assert "fingerprint" in result.stderr
+
+
 def test_invalid_request_file_exits_2(tmp_path: Path) -> None:
     requests_path = tmp_path / "requests.json"
     requests_path.write_text("{", encoding="utf-8")

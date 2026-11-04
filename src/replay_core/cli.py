@@ -12,7 +12,12 @@ from typing import NoReturn
 import typer
 
 from replay_core.client import ApiError, ReplayApiClient
-from replay_core.compare import build_report
+from replay_core.compare import (
+    DEFAULT_LATENCY_FACTOR,
+    DEFAULT_LATENCY_MARGIN_MS,
+    build_report,
+)
+from replay_core.fingerprint import fingerprint_requests
 from replay_core.har import HarError, import_har_file
 from replay_core.loader import (
     LoadError,
@@ -66,6 +71,7 @@ def record(
         Baseline(
             name=collection.name,
             target=target,
+            requests_fingerprint=fingerprint_requests(collection),
             exchanges=[item.exchange for item in attempts],
         ),
     )
@@ -109,24 +115,62 @@ def run(
         "--unsafe",
         help="Allow POST, PUT, PATCH, and DELETE. Replay can change server state.",
     ),
+    ignore_header: list[str] = typer.Option(
+        [],
+        "--ignore-header",
+        help="Extra response header name to ignore during compare. Repeatable.",
+    ),
+    check_latency: bool = typer.Option(
+        True,
+        "--latency/--no-latency",
+        help="Compare per-request elapsed_ms against the baseline threshold.",
+    ),
+    latency_factor: float = typer.Option(
+        DEFAULT_LATENCY_FACTOR,
+        "--latency-factor",
+        help="Latency fails above max(baseline*factor, baseline+margin).",
+    ),
+    latency_margin_ms: float = typer.Option(
+        DEFAULT_LATENCY_MARGIN_MS,
+        "--latency-margin-ms",
+        help="Absolute latency margin in milliseconds.",
+    ),
 ) -> None:
     """Replay a request file against a target and compare it to a baseline."""
 
     if output_format not in {"text", "json"}:
         _abort(UsageError("--format must be text or json"))
+    if latency_factor <= 0:
+        _abort(UsageError("--latency-factor must be positive"))
+    if latency_margin_ms < 0:
+        _abort(UsageError("--latency-margin-ms must be non-negative"))
     _check_limits(concurrency, timeout)
     collection = _load_collection(requests_path)
     try:
         baseline = load_baseline(baseline_path)
     except LoadError as exc:
         _abort(exc)
+    if baseline.requests_fingerprint is not None:
+        current = fingerprint_requests(collection)
+        if current != baseline.requests_fingerprint:
+            _abort(
+                UsageError(
+                    "request file does not match the baseline fingerprint; "
+                    "re-record or restore the original requests JSON"
+                )
+            )
     attempts = _send(target, collection, concurrency, timeout, unsafe)
+    ignore_headers = list(dict.fromkeys([*collection.ignore_headers, *ignore_header]))
     report = build_report(
         collection.name,
         collection.requests,
         baseline.exchanges,
         [item.exchange for item in attempts],
         collection.ignore,
+        ignore_headers=ignore_headers,
+        check_latency=check_latency,
+        latency_factor=latency_factor,
+        latency_margin_ms=latency_margin_ms,
     )
     save_report(out, report)
     rendered = serialize(report) if output_format == "json" else render_text(report)

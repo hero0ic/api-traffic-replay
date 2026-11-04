@@ -41,7 +41,7 @@ def test_import_strips_secrets_and_keeps_path(tmp_path: Path) -> None:
         [
             _entry(
                 "GET",
-                "https://api.example.com/v1/health",
+                "https://api.example.com/v1/health?api_key=SECRET_VALUE&page=1",
                 headers=[
                     {"name": "Authorization", "value": "Bearer secret"},
                     {"name": "Cookie", "value": "sid=1"},
@@ -57,9 +57,30 @@ def test_import_strips_secrets_and_keeps_path(tmp_path: Path) -> None:
     assert len(collection.requests) == 1
     spec = collection.requests[0]
     assert spec.method == "GET"
-    assert spec.path == "/health"
+    assert spec.path.startswith("/health?")
+    assert "SECRET_VALUE" not in spec.path
+    assert "api_key=***" in spec.path
+    assert "page=1" in spec.path
     assert spec.headers == {"accept": "application/json"}
     assert "secret" not in json.dumps(spec.model_dump(mode="json", by_alias=True))
+
+
+def test_import_redacts_json_body_secrets() -> None:
+    har = _har(
+        [
+            _entry(
+                "POST",
+                "https://api.example.com/login",
+                headers=[{"name": "Content-Type", "value": "application/json"}],
+                post_data={
+                    "mimeType": "application/json",
+                    "text": '{"username":"a","password":"hunter2"}',
+                },
+            )
+        ]
+    )
+    collection = load_har_json(har)
+    assert collection.requests[0].json_body == {"username": "a", "password": "***"}
 
 
 def test_import_json_post_body() -> None:

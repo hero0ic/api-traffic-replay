@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 import httpx
 
 from replay_core.models import Exchange, RequestSpec
-from replay_core.redact import redact_headers
+from replay_core.redact import redact_headers, redact_json
 
 MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -105,6 +105,7 @@ async def execute(
             async with semaphore:
                 exchange = await _perform(client, target, spec)
             elapsed_ms = (time.perf_counter() - started) * 1000
+            exchange = exchange.model_copy(update={"elapsed_ms": elapsed_ms})
             results[index] = Attempt(exchange=exchange, elapsed_ms=elapsed_ms)
 
         await asyncio.gather(*(send(index, spec) for index, spec in enumerate(requests)))
@@ -161,7 +162,7 @@ def _from_response(spec: RequestSpec, response: httpx.Response) -> Exchange:
             path=spec.path,
             status=response.status_code,
             headers=headers,
-            json_body=payload,
+            json_body=redact_json(payload),
             is_json=True,
         )
     text, encoding = _encode_body(response.content)

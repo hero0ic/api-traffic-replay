@@ -9,7 +9,7 @@ from typing import Any, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Outcome = Literal["matched", "regressed", "errored"]
-DiffKind = Literal["status", "header", "json", "body"]
+DiffKind = Literal["status", "header", "json", "body", "latency"]
 DiffOp = Literal["replace", "add", "remove"]
 BodyEncoding = Literal["utf-8", "base64"]
 
@@ -62,6 +62,7 @@ class RequestCollection(BaseModel):
 
     name: str
     ignore: list[str] = Field(default_factory=list)
+    ignore_headers: list[str] = Field(default_factory=list)
     requests: list[RequestSpec]
 
     @field_validator("name")
@@ -78,6 +79,11 @@ class RequestCollection(BaseModel):
             if any(part == "" for part in pattern.split(".")):
                 raise ValueError(f"invalid ignore path: {pattern!r}")
         return value
+
+    @field_validator("ignore_headers")
+    @classmethod
+    def lowercase_ignore_headers(cls, value: list[str]) -> list[str]:
+        return [item.lower() for item in value]
 
     @model_validator(mode="after")
     def request_ids_are_unique(self) -> Self:
@@ -103,6 +109,7 @@ class Exchange(BaseModel):
     body_encoding: BodyEncoding = "utf-8"
     is_json: bool = False
     error: str | None = None
+    elapsed_ms: float | None = None
 
     @field_validator("headers")
     @classmethod
@@ -125,6 +132,7 @@ class Baseline(BaseModel):
 
     name: str
     target: str
+    requests_fingerprint: str | None = None
     exchanges: list[Exchange]
 
 
@@ -149,6 +157,8 @@ class CaseResult(BaseModel):
     error: str | None = None
     baseline_status: int | None = None
     candidate_status: int | None = None
+    baseline_elapsed_ms: float | None = None
+    candidate_elapsed_ms: float | None = None
 
 
 class Summary(BaseModel):

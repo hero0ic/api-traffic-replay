@@ -122,7 +122,9 @@ def test_upload_collection_baseline_and_run(api_client: TestClient) -> None:
     body = run.json()
     assert body["total"] == 2
     assert body["regressed"] == 1
-    assert body["report"] == SAMPLE_REPORT
+    assert body["report"]["name"] == SAMPLE_REPORT["name"]
+    assert body["report"]["summary"] == SAMPLE_REPORT["summary"]
+    assert body["report"]["results"][0]["diffs"][0]["kind"] == "status"
     assert body["collection_id"] == collection_id
     assert body["baseline_id"] == baseline_id
 

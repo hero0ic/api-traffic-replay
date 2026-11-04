@@ -67,8 +67,15 @@ These headers are removed before a baseline is saved and ignored again during co
 - secrets: `authorization`, `cookie`, `set-cookie`
 - hop identity: `date`, `server`
 - transfer metadata: `content-length`, `transfer-encoding`, `connection`
+- volatile correlation headers: `x-request-id`, `x-correlation-id`, `cf-ray`, and similar
 
-`content-type` is still compared. `content-length` is not, because two equivalent JSON bodies can have different sizes once formatting changes, and the body diff already covers the payload.
+`content-type` is still compared. Pass extra names with `--ignore-header` or `ignore_headers` in the request file.
+
+Query parameters and JSON object keys named like `api_key`, `token`, `password`, and `secret` are replaced with `***` on HAR import, response capture, and AI diagnosis prompts. This is a denylist, not a complete DLP system.
+
+Baselines store a fingerprint of the request file. If you change method/path/body while keeping the same request id, `replay run` exits `2` instead of comparing unrelated responses. Per-exchange method/path must also match the current request spec.
+
+When both baseline and candidate recorded `elapsed_ms`, a request is a latency regression if candidate time exceeds `max(baseline * factor, baseline + margin)` (defaults: factor `2`, margin `100ms`). Disable with `--no-latency`.
 
 ## Safety
 

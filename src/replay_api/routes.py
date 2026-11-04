@@ -70,7 +70,7 @@ def create_collection(
     record = RequestCollectionRecord(
         project_id=project.id,
         name=body.name,
-        payload=body.model_dump(mode="json", by_alias=True),
+        payload=body.model_dump(mode="json", by_alias=True, exclude_none=True),
     )
     db.add(record)
     db.commit()
@@ -100,7 +100,7 @@ def create_baseline(
         collection_id=body.collection_id,
         name=body.baseline.name,
         target=body.baseline.target,
-        payload=body.baseline.model_dump(mode="json", by_alias=True),
+        payload=body.baseline.model_dump(mode="json", by_alias=True, exclude_none=True),
     )
     db.add(record)
     db.commit()
@@ -146,7 +146,7 @@ def create_run(
     db.flush()
     report = ReportRecord(
         run_id=run.id,
-        payload=body.report.model_dump(mode="json", by_alias=True),
+        payload=body.report.model_dump(mode="json", by_alias=True, exclude_none=True),
     )
     db.add(report)
     db.commit()

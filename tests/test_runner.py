@@ -121,8 +121,29 @@ async def test_response_headers_are_redacted() -> None:
         transport=httpx.MockTransport(handler),
     )
     headers = attempts[0].exchange.headers
-    assert headers == {"content-type": "application/json", "x-request-id": "abc"}
+    assert headers == {"content-type": "application/json"}
     assert "secret" not in str(headers)
+    assert attempts[0].exchange.elapsed_ms is not None
+
+
+async def test_json_secrets_are_redacted_on_capture() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={"sku": "A", "password": "hunter2", "nested": {"token": "abc"}},
+        )
+
+    attempts = await execute(
+        "http://example.test",
+        [RequestSpec(id="secret", method="GET", path="/secret")],
+        transport=httpx.MockTransport(handler),
+    )
+    assert attempts[0].exchange.json_body == {
+        "sku": "A",
+        "password": "***",
+        "nested": {"token": "***"},
+    }
 
 
 async def test_invalid_json_is_stored_as_text() -> None:

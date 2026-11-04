@@ -100,6 +100,35 @@ def test_build_prompt_truncates_long_values() -> None:
     assert baseline.endswith("…")
 
 
+def test_build_prompt_redacts_secret_diff_values() -> None:
+    report = {
+        "name": "demo",
+        "summary": {"total": 1, "matched": 0, "regressed": 1, "errored": 0},
+        "results": [
+            {
+                "id": "login",
+                "method": "POST",
+                "path": "/login",
+                "outcome": "regressed",
+                "diffs": [
+                    {
+                        "kind": "json",
+                        "path": "password",
+                        "op": "replace",
+                        "baseline": "old-secret",
+                        "candidate": "new-secret",
+                    }
+                ],
+            }
+        ],
+    }
+    prompt = build_diagnosis_prompt(report)
+    user = prompt["messages"][1]["content"]
+    assert "old-secret" not in user
+    assert "new-secret" not in user
+    assert "***" in user
+
+
 def test_build_prompt_rejects_empty_regressions() -> None:
     report = {
         "name": "clean",

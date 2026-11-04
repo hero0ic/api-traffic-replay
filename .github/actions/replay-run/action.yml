@@ -76,25 +76,33 @@ runs:
       id: replay
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        REPLAY_TARGET: ${{ inputs.target }}
+        REPLAY_REQUESTS: ${{ inputs.requests }}
+        REPLAY_BASELINE: ${{ inputs.baseline }}
+        REPLAY_REPORT: ${{ inputs.report }}
+        REPLAY_CONCURRENCY: ${{ inputs.concurrency }}
+        REPLAY_TIMEOUT: ${{ inputs.timeout }}
+        REPLAY_UNSAFE: ${{ inputs.unsafe }}
       run: |
         set +e
         ARGS=(
           replay run
-          --target "${{ inputs.target }}"
-          --requests "${{ inputs.requests }}"
-          --baseline "${{ inputs.baseline }}"
-          --out "${{ inputs.report }}"
-          --concurrency "${{ inputs.concurrency }}"
-          --timeout "${{ inputs.timeout }}"
+          --target "$REPLAY_TARGET"
+          --requests "$REPLAY_REQUESTS"
+          --baseline "$REPLAY_BASELINE"
+          --out "$REPLAY_REPORT"
+          --concurrency "$REPLAY_CONCURRENCY"
+          --timeout "$REPLAY_TIMEOUT"
           --format text
         )
-        if [[ "${{ inputs.unsafe }}" == "true" ]]; then
+        if [[ "$REPLAY_UNSAFE" == "true" ]]; then
           ARGS+=(--unsafe)
         fi
         "${ARGS[@]}"
         code=$?
         echo "exit-code=${code}" >> "$GITHUB_OUTPUT"
-        echo "report-path=${{ inputs.report }}" >> "$GITHUB_OUTPUT"
+        echo "report-path=${REPLAY_REPORT}" >> "$GITHUB_OUTPUT"
         exit "${code}"
 
     - name: Upload report with API token
@@ -102,21 +110,27 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
+        REPLAY_API_URL: ${{ inputs.api-url }}
+        REPLAY_PROJECT_ID: ${{ inputs.project-id }}
         REPLAY_API_TOKEN: ${{ inputs.api-token }}
+        REPLAY_REPORT: ${{ inputs.report }}
+        REPLAY_REQUESTS: ${{ inputs.requests }}
+        REPLAY_BASELINE: ${{ inputs.baseline }}
+        REPLAY_TARGET: ${{ inputs.target }}
       run: |
-        if [[ -z "${{ inputs.api-url }}" || -z "${{ inputs.project-id }}" || -z "${REPLAY_API_TOKEN}" ]]; then
+        if [[ -z "$REPLAY_API_URL" || -z "$REPLAY_PROJECT_ID" || -z "$REPLAY_API_TOKEN" ]]; then
           echo "upload=true requires api-url, project-id, and api-token" >&2
           exit 2
         fi
-        if [[ ! -f "${{ inputs.report }}" ]]; then
-          echo "report file missing: ${{ inputs.report }}" >&2
+        if [[ ! -f "$REPLAY_REPORT" ]]; then
+          echo "report file missing: $REPLAY_REPORT" >&2
           exit 2
         fi
         replay upload \
-          --api-url "${{ inputs.api-url }}" \
-          --token "${REPLAY_API_TOKEN}" \
-          --project-id "${{ inputs.project-id }}" \
-          --report "${{ inputs.report }}" \
-          --requests "${{ inputs.requests }}" \
-          --baseline "${{ inputs.baseline }}" \
-          --target "${{ inputs.target }}"
+          --api-url "$REPLAY_API_URL" \
+          --token "$REPLAY_API_TOKEN" \
+          --project-id "$REPLAY_PROJECT_ID" \
+          --report "$REPLAY_REPORT" \
+          --requests "$REPLAY_REQUESTS" \
+          --baseline "$REPLAY_BASELINE" \
+          --target "$REPLAY_TARGET"

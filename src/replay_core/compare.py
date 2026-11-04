@@ -19,6 +19,10 @@ from replay_core.models import (
 )
 from replay_core.redact import redact_headers
 
+# Latency fails when candidate exceeds max(baseline * factor, baseline + margin).
+DEFAULT_LATENCY_FACTOR = 2.0
+DEFAULT_LATENCY_MARGIN_MS = 100.0
+
 
 def parse_ignore(patterns: list[str]) -> list[list[str]]:
     """Split dotted ignore paths. ``*`` is a single path segment, not a regex."""
@@ -131,9 +135,14 @@ def _diff_array(
     return diffs
 
 
-def diff_headers(baseline: dict[str, str], candidate: dict[str, str]) -> list[Diff]:
-    left = redact_headers(baseline)
-    right = redact_headers(candidate)
+def diff_headers(
+    baseline: dict[str, str],
+    candidate: dict[str, str],
+    *,
+    extra_ignore: list[str] | None = None,
+) -> list[Diff]:
+    left = redact_headers(baseline, extra_ignore=extra_ignore)
+    right = redact_headers(candidate, extra_ignore=extra_ignore)
     diffs: list[Diff] = []
     for name in sorted(set(left) | set(right)):
         if name not in left:
@@ -148,6 +157,9 @@ def diff_headers(baseline: dict[str, str], candidate: dict[str, str]) -> list[Di
 
 
 def _body_bytes(exchange: Exchange) -> bytes:
+    if exchange.is_json:
+        text = json.dumps(exchange.json_body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return text.encode("utf-8")
     if not exchange.body:
         return b""
     if exchange.body_encoding == "base64":
@@ -161,7 +173,25 @@ def _body_text(exchange: Exchange) -> str:
     return exchange.body or ""
 
 
-def compare_responses(baseline: Exchange, candidate: Exchange, ignore: list[str]) -> list[Diff]:
+def latency_threshold(
+    baseline_ms: float,
+    *,
+    factor: float = DEFAULT_LATENCY_FACTOR,
+    margin_ms: float = DEFAULT_LATENCY_MARGIN_MS,
+) -> float:
+    return max(baseline_ms * factor, baseline_ms + margin_ms)
+
+
+def compare_responses(
+    baseline: Exchange,
+    candidate: Exchange,
+    ignore: list[str],
+    *,
+    ignore_headers: list[str] | None = None,
+    check_latency: bool = True,
+    latency_factor: float = DEFAULT_LATENCY_FACTOR,
+    latency_margin_ms: float = DEFAULT_LATENCY_MARGIN_MS,
+) -> list[Diff]:
     """Compare two captured responses. The caller handles transport errors."""
 
     patterns = parse_ignore(ignore)
@@ -176,9 +206,21 @@ def compare_responses(baseline: Exchange, candidate: Exchange, ignore: list[str]
                 candidate=candidate.status,
             )
         )
-    diffs.extend(diff_headers(baseline.headers, candidate.headers))
+    diffs.extend(diff_headers(baseline.headers, candidate.headers, extra_ignore=ignore_headers))
+
     if baseline.is_json and candidate.is_json:
         diffs.extend(diff_json(baseline.json_body, candidate.json_body, patterns))
+    elif baseline.is_json != candidate.is_json:
+        # Mixed content types must never fall through to empty-body equality.
+        diffs.append(
+            Diff(
+                kind="body",
+                path="",
+                op="replace",
+                baseline=_body_text(baseline),
+                candidate=_body_text(candidate),
+            )
+        )
     elif _body_bytes(baseline) != _body_bytes(candidate):
         diffs.append(
             Diff(
@@ -189,6 +231,27 @@ def compare_responses(baseline: Exchange, candidate: Exchange, ignore: list[str]
                 candidate=_body_text(candidate),
             )
         )
+
+    if (
+        check_latency
+        and baseline.elapsed_ms is not None
+        and candidate.elapsed_ms is not None
+    ):
+        limit = latency_threshold(
+            baseline.elapsed_ms,
+            factor=latency_factor,
+            margin_ms=latency_margin_ms,
+        )
+        if candidate.elapsed_ms > limit:
+            diffs.append(
+                Diff(
+                    kind="latency",
+                    path="",
+                    op="replace",
+                    baseline=baseline.elapsed_ms,
+                    candidate=candidate.elapsed_ms,
+                )
+            )
     return diffs
 
 
@@ -198,13 +261,27 @@ def build_report(
     baseline: list[Exchange],
     candidate: list[Exchange],
     ignore: list[str],
+    *,
+    ignore_headers: list[str] | None = None,
+    check_latency: bool = True,
+    latency_factor: float = DEFAULT_LATENCY_FACTOR,
+    latency_margin_ms: float = DEFAULT_LATENCY_MARGIN_MS,
 ) -> Report:
     """Match exchanges by request id and preserve the request file's order."""
 
     baseline_by_id = {item.id: item for item in baseline}
     candidate_by_id = {item.id: item for item in candidate}
     results = [
-        _compare_one(spec, baseline_by_id.get(spec.id), candidate_by_id.get(spec.id), ignore)
+        _compare_one(
+            spec,
+            baseline_by_id.get(spec.id),
+            candidate_by_id.get(spec.id),
+            ignore,
+            ignore_headers=ignore_headers,
+            check_latency=check_latency,
+            latency_factor=latency_factor,
+            latency_margin_ms=latency_margin_ms,
+        )
         for spec in specs
     ]
     return Report(name=name, summary=_summarize(results), results=results)
@@ -215,8 +292,15 @@ def _compare_one(
     baseline: Exchange | None,
     candidate: Exchange | None,
     ignore: list[str],
+    *,
+    ignore_headers: list[str] | None = None,
+    check_latency: bool = True,
+    latency_factor: float = DEFAULT_LATENCY_FACTOR,
+    latency_margin_ms: float = DEFAULT_LATENCY_MARGIN_MS,
 ) -> CaseResult:
     baseline_status = None if baseline is None else baseline.status
+    baseline_elapsed = None if baseline is None else baseline.elapsed_ms
+    candidate_elapsed = None if candidate is None else candidate.elapsed_ms
     if candidate is None:
         return CaseResult(
             id=spec.id,
@@ -225,6 +309,7 @@ def _compare_one(
             outcome="errored",
             error="candidate request was not executed",
             baseline_status=baseline_status,
+            baseline_elapsed_ms=baseline_elapsed,
         )
     if candidate.error:
         return CaseResult(
@@ -235,6 +320,8 @@ def _compare_one(
             error=candidate.error,
             baseline_status=baseline_status,
             candidate_status=candidate.status,
+            baseline_elapsed_ms=baseline_elapsed,
+            candidate_elapsed_ms=candidate_elapsed,
         )
     if baseline is None:
         return CaseResult(
@@ -244,6 +331,7 @@ def _compare_one(
             outcome="errored",
             error=f"no baseline recorded for {spec.id}",
             candidate_status=candidate.status,
+            candidate_elapsed_ms=candidate_elapsed,
         )
     if baseline.error:
         return CaseResult(
@@ -254,8 +342,33 @@ def _compare_one(
             error=f"baseline request failed: {baseline.error}",
             baseline_status=baseline.status,
             candidate_status=candidate.status,
+            baseline_elapsed_ms=baseline_elapsed,
+            candidate_elapsed_ms=candidate_elapsed,
         )
-    diffs = compare_responses(baseline, candidate, ignore)
+    if baseline.method != spec.method or baseline.path != spec.path:
+        return CaseResult(
+            id=spec.id,
+            method=spec.method,
+            path=spec.path,
+            outcome="errored",
+            error=(
+                "baseline request identity mismatch: "
+                f"{baseline.method} {baseline.path} vs {spec.method} {spec.path}"
+            ),
+            baseline_status=baseline.status,
+            candidate_status=candidate.status,
+            baseline_elapsed_ms=baseline_elapsed,
+            candidate_elapsed_ms=candidate_elapsed,
+        )
+    diffs = compare_responses(
+        baseline,
+        candidate,
+        ignore,
+        ignore_headers=ignore_headers,
+        check_latency=check_latency,
+        latency_factor=latency_factor,
+        latency_margin_ms=latency_margin_ms,
+    )
     return CaseResult(
         id=spec.id,
         method=spec.method,
@@ -264,6 +377,8 @@ def _compare_one(
         diffs=diffs,
         baseline_status=baseline.status,
         candidate_status=candidate.status,
+        baseline_elapsed_ms=baseline_elapsed,
+        candidate_elapsed_ms=candidate_elapsed,
     )
 
 

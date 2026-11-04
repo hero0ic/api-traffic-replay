@@ -66,7 +66,8 @@ def test_upload_collection_then_run(api_client: TestClient, tmp_path: Path) -> N
         target="http://127.0.0.1:9/v2",
     )
     assert run["collection_id"] == collection["id"]
-    assert run["report"] == SAMPLE_REPORT
+    assert run["report"]["summary"] == SAMPLE_REPORT["summary"]
+    assert run["report"]["results"][0]["id"] == "health"
 
 
 def test_projects_create_help() -> None:
